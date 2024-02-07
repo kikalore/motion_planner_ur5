@@ -6,7 +6,7 @@
 #include <eigen3/Eigen/Geometry> //to use quaternions
 #include <string.h>
 #include <cmath>
-#include "ros/ros.h"
+// #include "ros/ros.h"
 using namespace Eigen;
 using namespace std;
 
@@ -34,7 +34,7 @@ int print_eigen(string str, Matrix4d m);
 Matrix6d computeJacobian(Vector6d th);
 
 // the function directKin returns the direct Kinematic esxpressed in a matrix Tm (Transformation Matrix)
-void directKin(VectorXd Th);
+Matrix4d directKin(VectorXd Th);
 
 //function to compute the inverse kinematics:known the final pose we want to know the joint angles
 void inverseKin(MatrixXd &Th,double scaleFactor, VectorXd &pe60, Matrix3d &Re, Matrix4d &Tm);

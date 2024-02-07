@@ -1,4 +1,10 @@
 #include "motion_planner.h"
+#include <iostream>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry> //to use quaternions
+#include <string.h>
+#include <cmath>
 using namespace Eigen;
 using namespace std;
 
@@ -75,7 +81,7 @@ Matrix6d computeJacobian(Vector6d th)
     return jacobianMatrix;
 }
 
-Matrix4d directKin(Vector6d Th)
+Eigen::Matrix4d directKin(Eigen::VectorXd Th)
 {
     Matrix4d TransformationMatrix;
     // compute single transformations
@@ -378,66 +384,65 @@ Quaterniond q_i(double time, Quaterniond q1, Quaterniond q2)
         return q2;
 }
 
-Path inverseDiffQuat(Vector8d UR5measures, Vector3d p_start, Vector3d p_end, Quaterniond q_start, Quaterniond q_end)
-{
-    // gripper state
-    Vector2d gripper_state{UR5measures(6), UR5measures(7)}; // last two rows of measures vector
-    // joint values at time=t, their derivatives in time and (velocities+error(e))-->real velocities
-    Vector6d jointValues, jointValues_dot, correctedVelocities;
-    Path pathToFollow; //-->returned path
-    Matrix4d transfromationMatrixAtT;
-    Vector3d positionAtT, linVelocitiesAtT, angVelocitiesAtT;
-    Quaterniond quaternionAtT, quaternionAngVelAtT, quaternionErr;
-    Matrix6d jacobianAtT, pseudoRightInverseJacAtT; // jacobian and it pseudo right inverse matrices
+// Path inverseDiffQuat(Vector8d UR5measures, Vector3d p_start, Vector3d p_end, Quaterniond q_start, Quaterniond q_end)
+// {
+//     // gripper state
+//     Vector2d gripper_state{UR5measures(6), UR5measures(7)}; // last two rows of measures vector
+//     // joint values at time=t, their derivatives in time and (velocities+error(e))-->real velocities
+//     Vector6d jointValues, jointValues_dot, correctedVelocities;
+//     Path pathToFollow; //-->returned path
+//     Matrix4d transfromationMatrixAtT;
+//     Vector3d positionAtT, linVelocitiesAtT, angVelocitiesAtT;
+//     Quaterniond quaternionAtT, quaternionAngVelAtT, quaternionErr;
+//     Matrix6d jacobianAtT, pseudoRightInverseJacAtT; // jacobian and it pseudo right inverse matrices
 
-    Matrix3d Kp, Kq;         // are the matrices used to correction of position and quaternion
-    Kp = Kp.Identity() * 10; // 10 is the correction factor
-    Kq = Kq.Identity() * 1;  // 1 is the correction factor
+//     Matrix3d Kp, Kq;         // are the matrices used to correction of position and quaternion
+//     Kp = Kp.Identity() * 10; // 10 is the correction factor
+//     Kq = Kq.Identity() * 1;  // 1 is the correction factor
 
-    // add point to path
-    for (int i = 0; i < 6; ++i)
-    {
-        jointValues(i) = UR5measures(i);
-    }
+//     // add point to path
+//     for (int i = 0; i < 6; ++i)
+//     {
+//         jointValues(i) = UR5measures(i);
+//     }
 
-    // at each dt compute new joints state
-    for (double t = dt; t < path_dt; t += dt)
-    {
-        // compute direct kinematics a time=T
-        transfromationMatrixAtT = directKin(jointValues);
-        positionAtT = transfromationMatrixAtT.block(0, 3, 3, 1);
-        quaternionAtT = Quaterniond(transfromationMatrixAtT.block(0, 0, 3, 3));
+//     // at each dt compute new joints state
+//     for (double t = dt; t < path_dt; t += dt)
+//     {
+//         // compute direct kinematics a time=T
+//         transfromationMatrixAtT = directKin(jointValues);
+//         positionAtT = transfromationMatrixAtT.block(0, 3, 3, 1);
+//         quaternionAtT = Quaterniond(transfromationMatrixAtT.block(0, 0, 3, 3));
 
-        // compute velocities at time=T
-        linVelocitiesAtT = (p_i(t, p_start, p_end) - p_i(t - dt, p_start, p_end)) / dt;
-        quaternionAngVelAtT = q_i(t + dt, q_start, q_end) * q_i(t, q_start, q_end).conjugate();
-        angVelocitiesAtT = (quaternionAngVelAtT.vec() * 2) / dt;
+//         // compute velocities at time=T
+//         linVelocitiesAtT = (p_i(t, p_start, p_end) - p_i(t - dt, p_start, p_end)) / dt;
+//         quaternionAngVelAtT = q_i(t + dt, q_start, q_end) * q_i(t, q_start, q_end).conjugate();
+//         angVelocitiesAtT = (quaternionAngVelAtT.vec() * 2) / dt;
 
-        jacobianAtT = computeJacobian(jacobianAtT);
-        pseudoRightInverseJacAtT = ((jacobianAtT.transpose() * jacobianAtT + jacobianAtT.Identity() * 0.0001).inverse()) * jacobianAtT.transpose();
+//         jacobianAtT = computeJacobian(jacobianAtT);
+//         pseudoRightInverseJacAtT = ((jacobianAtT.transpose() * jacobianAtT + jacobianAtT.Identity() * 0.0001).inverse()) * jacobianAtT.transpose();
 
-        if (abs(jacobianAtT.determinant()) < 0.00001)
-        {
-            ROS_WARN("Near singular configuration");
-        }
+//         if (abs(jacobianAtT.determinant()) < 0.00001)
+//         {
+//             //ROS_WARN("Near singular configuration");
+//         }
 
-        quaternionErr = q_i(t, q_start, q_end) * quaternionAtT.conjugate();
-        Vector3d linearPosError = p_i(t, p_start, p_end) - positionAtT;
+//         quaternionErr = q_i(t, q_start, q_end) * quaternionAtT.conjugate();
+//         Vector3d linearPosError = p_i(t, p_start, p_end) - positionAtT;
 
-        correctedVelocities << linVelocitiesAtT + (Kp * linearPosError), angVelocitiesAtT + (Kq * quaternionErr.vec());
+//         correctedVelocities << linVelocitiesAtT + (Kp * linearPosError), angVelocitiesAtT + (Kq * quaternionErr.vec());
 
-        jointValues_dot = pseudoRightInverseJacAtT * correctedVelocities;
-        jointValues = jointValues + (jointValues_dot * dt);
+//         jointValues_dot = pseudoRightInverseJacAtT * correctedVelocities;
+//         jointValues = jointValues + (jointValues_dot * dt);
 
-        pathToFollow = insert_new_path_instance(pathToFollow, jointValues, gripper_state);
-    }
-    return pathToFollow;
-}
+//         pathToFollow = insert_new_path_instance(pathToFollow, jointValues, gripper_state);
+//     }
+//     return pathToFollow;
+// }
 
-Path insert_new_path_instance(Path p, Vector6d js, Vector2d gripper_state)
-    {
-        p.conservativeResize(p.rows() + 1, p.cols());
-        p.row(p.rows() - 1) = V8d{js(0), js(1), js(2), js(3), js(4), js(5), gripper_state(0), gripper_state(1)};
-        return p;
-    }
-
+// Path insert_new_path_instance(Path p, Vector6d js, Vector2d gripper_state)
+//     {
+//         p.conservativeResize(p.rows() + 1, p.cols());
+//         p.row(p.rows() - 1) = V8d{js(0), js(1), js(2), js(3), js(4), js(5), gripper_state(0), gripper_state(1)};
+//         return p;
+//     }
