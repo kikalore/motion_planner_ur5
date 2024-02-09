@@ -6,30 +6,31 @@ int main()
 {
     Matrix6d myJac;
     Matrix4d directMatrix, directMatrix2;
-    MatrixXd Th;
-    Vector6d myJointVariables(6);
+    Vector6d myJointVariables;
+    Vector6d myvars;
     Vector3d pe60;
     Matrix3d Re;
     Matrix4d Tm;
     // testing with homing position variables
     myJointVariables << -0.0001, -0.00016, -0.00006, -0.00014, -0.00004, 0.00001;
+    myvars<< 1,1,1,1,1,1;
 
     // matrix from base to world
     cout << "\nrototransMatrix\n"
          << rotation_180z_axis_and_offset() << endl;
 
     // testing direct kinematics
-    directMatrix = directKin(myJointVariables);
+    directMatrix = directKin(myvars);
     print_eigen("Direct matrix with reference to BASE frame\n", directMatrix);
     cout << endl;
 
     // PREMULTIPLY to express position in a FIXED frame
-    directMatrix = rotation_180z_axis_and_offset() * directKin(myJointVariables);
+    directMatrix = rotation_180z_axis_and_offset() * directKin(myvars);
     print_eigen("Direct matrix with reference to WORLD frame (NOT CORRECT?)\n", directMatrix);
     cout << endl;
 
     // testing Jacobian computation
-    myJac = computeJacobian(myJointVariables);
+    myJac = computeJacobian(myvars);
     print_eigen("Jacobian matrix\n", myJac);
 
     // testing interpolation (position and quaternion)
@@ -51,9 +52,14 @@ int main()
     Vector3d result_p2 = lerp(time2, p1, p2);
     Vector3d expected_p2 = p2;
     cout << "Test case 2:" << endl;
-    cout << "Result: " << result2.coeffs().transpose() <<"\t"<< result_p2.transpose() << endl;
+    cout << "Result: " << result2.coeffs().transpose() << "\t" << result_p2.transpose() << endl;
     cout << endl;
 
-    
+    // testing inverse kinematics
+    Matrix<double, 6, 8> Th;
+    Vector3d my_pos60 = directMatrix.col(3).head(3);
+    Matrix3d my_R60 = directMatrix.block<3, 3>(0, 0);
+    Th = inverseKin(my_pos60, my_R60, 10);
+    print_eigen("joint variables from inverse kinematics\n", Th);
     return 0;
 }

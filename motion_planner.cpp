@@ -110,7 +110,7 @@ Eigen::Matrix4d directKin(Eigen::VectorXd Th)
     // Re = Tm.block<3, 3>(0, 0);
 }
 
-void inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
+Matrix<double, 6, 8> inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
 {
     // Vector of the a distance (expressed in meters)
     VectorXd A_Distance(6);
@@ -118,7 +118,7 @@ void inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
 
     // Vector of the D distance (expressed in meters)
     VectorXd distance(6);
-    
+
     distance = D * scaleFactor;
 
     // Anonymous function for the computation of the transformation matrix (general form)
@@ -134,7 +134,7 @@ void inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
     if (p50xy < D(3))
     {
         cout << "Position request in the unreachable cylinder" << endl;
-        return;
+        exit;
     }
     auto phi1_1 = acos(D(3) / p50xy);
     auto phi1_2 = -phi1_1;
@@ -152,8 +152,8 @@ void inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
     Matrix4d T10_1 = computeTransformationMatrix(th1_1, ALPHA(0), D(0), A(0));
     Matrix4d T10_2 = computeTransformationMatrix(th1_2, ALPHA(0), D(0), A(0));
 
-    Matrix4d T16_1 = ((T10_1.inverse()) * Tm).inverse();
-    Matrix4d T16_2 = ((T10_2.inverse()) * Tm).inverse();
+    Matrix4d T16_1 = ((T10_1.inverse()) * T60).inverse();
+    Matrix4d T16_2 = ((T10_2.inverse()) * T60).inverse();
 
     double zy_1 = T16_1(1, 2);
     double zx_1 = T16_1(0, 2);
@@ -374,12 +374,14 @@ void inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor)
     double th4_2_2_2 = atan2(xy, xx);
     cout << "hi1" << endl;
     // // Finally compute the inverse kinematic and find the joint angles (remembering we started from final rotation matrix)
-    // Th << th1_1, th1_1, th1_1, th1_1, th1_2, th1_2, th1_2, th1_2,
-    //     th2_1_1_1, th2_1_1_2, th2_1_2_1, th2_1_2_2, th2_2_2_1, th2_2_1_2, th2_2_2_1, th2_2_2_2,
-    //     th3_1_1_1, th3_1_1_2, th3_1_2_1, th3_1_2_2, th3_2_2_1, th3_2_1_2, th3_2_2_1, th3_2_2_2,
-    //     th4_1_1_1, th4_1_1_2, th4_1_2_1, th4_1_2_2, th4_2_2_1, th4_2_1_2, th4_2_2_1, th4_2_2_2,
-    //     th5_1_1, th5_1_1, th5_1_2, th5_1_2, th5_2_2, th5_2_1, th5_2_2, th5_2_2,
-    //     th6_1_1, th6_1_1, th6_1_2, th6_1_2, th6_2_2, th6_2_1, th6_2_2, th6_2_2;
+    Matrix<double, 6, 8> Th;
+    Th << th1_1, th1_1, th1_1, th1_1, th1_2, th1_2, th1_2, th1_2,
+        th2_1_1_1, th2_1_1_2, th2_1_2_1, th2_1_2_2, th2_2_2_1, th2_2_1_2, th2_2_2_1, th2_2_2_2,
+        th3_1_1_1, th3_1_1_2, th3_1_2_1, th3_1_2_2, th3_2_2_1, th3_2_1_2, th3_2_2_1, th3_2_2_2,
+        th4_1_1_1, th4_1_1_2, th4_1_2_1, th4_1_2_2, th4_2_2_1, th4_2_1_2, th4_2_2_1, th4_2_2_2,
+        th5_1_1, th5_1_1, th5_1_2, th5_1_2, th5_2_2, th5_2_1, th5_2_2, th5_2_2,
+        th6_1_1, th6_1_1, th6_1_2, th6_1_2, th6_2_2, th6_2_1, th6_2_2, th6_2_2;
+    return Th;
 }
 
 Vector3d lerp(double time, Vector3d p1, Vector3d p2)
@@ -408,65 +410,67 @@ Quaterniond myslerp(double time, Quaterniond q1, Quaterniond q2)
         return q2;
 }
 
-// Path inverseDiffQuat(Vector8d UR5measures, Vector3d p_start, Vector3d p_end, Quaterniond q_start, Quaterniond q_end)
-// {
-//     // gripper state
-//     Vector2d gripper_state{UR5measures(6), UR5measures(7)}; // last two rows of measures vector
-//     // joint values at time=t, their derivatives in time and (velocities+error(e))-->real velocities
-//     Vector6d jointValues, jointValues_dot, correctedVelocities;
-//     Path pathToFollow; //-->returned path
-//     Matrix4d transfromationMatrixAtT;
-//     Vector3d positionAtT, linVelocitiesAtT, angVelocitiesAtT;
-//     Quaterniond quaternionAtT, quaternionAngVelAtT, quaternionErr;
-//     Matrix6d jacobianAtT, pseudoRightInverseJacAtT; // jacobian and it pseudo right inverse matrices
+Path inverseDiffQuat(Vector8d UR5measures, Vector3d p_start, Vector3d p_end, Quaterniond q_start, Quaterniond q_end)
+{
+    // gripper state
+    Vector2d gripper_state{UR5measures(6), UR5measures(7)}; // last two rows of measures vector
+    // joint values at time=t, their derivatives in time and (velocities+error(e))-->real velocities
+    Vector6d jointValues, jointValues_dot, correctedVelocities;
+    Path pathToFollow; //-->returned path
+    Matrix4d transfromationMatrixAtT;
+    Vector3d positionAtT, linVelocitiesAtT, angVelocitiesAtT;
+    Quaterniond quaternionAtT, quaternionAngVelAtT, quaternionErr;
+    Matrix6d jacobianAtT, pseudoRightInverseJacAtT; // jacobian and it pseudo right inverse matrices
 
-//     Matrix3d Kp, Kq;         // are the matrices used to correction of position and quaternion
-//     Kp = Kp.Identity() * 10; // 10 is the correction factor
-//     Kq = Kq.Identity() * 1;  // 1 is the correction factor
+    Matrix3d Kp, Kq;         // are the matrices used to correction of position and quaternion
+    Kp = Kp.Identity() * 10; // 10 is the correction factor
+    Kq = Kq.Identity() * 1;  // 1 is the correction factor
 
-//     // add point to path
-//     for (int i = 0; i < 6; ++i)
-//     {
-//         jointValues(i) = UR5measures(i);
-//     }
+    // add point to path
+    for (int i = 0; i < 6; ++i)
+    {
+        jointValues(i) = UR5measures(i);
+    }
 
-//     // at each dt compute new joints state
-//     for (double t = dt; t < path_dt; t += dt)
-//     {
-//         // compute direct kinematics a time=T
-//         transfromationMatrixAtT = directKin(jointValues);
-//         positionAtT = transfromationMatrixAtT.block(0, 3, 3, 1);
-//         quaternionAtT = Quaterniond(transfromationMatrixAtT.block(0, 0, 3, 3));
+    // at each dt compute new joints state
+    for (double t = dt; t < path_dt; t += dt)
+    {
+        // compute direct kinematics a time=T
+        transfromationMatrixAtT = directKin(jointValues);
+        positionAtT = transfromationMatrixAtT.block(0, 3, 3, 1);
+        quaternionAtT = Quaterniond(transfromationMatrixAtT.block(0, 0, 3, 3));
 
-//         // compute velocities at time=T
-//         linVelocitiesAtT = (p_i(t, p_start, p_end) - p_i(t - dt, p_start, p_end)) / dt;
-//         quaternionAngVelAtT = q_i(t + dt, q_start, q_end) * q_i(t, q_start, q_end).conjugate();
-//         angVelocitiesAtT = (quaternionAngVelAtT.vec() * 2) / dt;
+        // compute velocities at time=T
+        linVelocitiesAtT = (lerp(t, p_start, p_end) - lerp(t - dt, p_start, p_end)) / dt;
+        quaternionAngVelAtT = myslerp(t + dt, q_start, q_end) * myslerp(t, q_start, q_end).conjugate();
+        angVelocitiesAtT = (quaternionAngVelAtT.vec() * 2) / dt;
 
-//         jacobianAtT = computeJacobian(jacobianAtT);
-//         pseudoRightInverseJacAtT = ((jacobianAtT.transpose() * jacobianAtT + jacobianAtT.Identity() * 0.0001).inverse()) * jacobianAtT.transpose();
+        jacobianAtT = computeJacobian(jacobianAtT);
+        pseudoRightInverseJacAtT = ((jacobianAtT.transpose() * jacobianAtT + jacobianAtT.Identity() * 0.0001).inverse()) * jacobianAtT.transpose();
 
-//         if (abs(jacobianAtT.determinant()) < 0.00001)
-//         {
-//             //ROS_WARN("Near singular configuration");
-//         }
+        if (abs(jacobianAtT.determinant()) < 0.00001)
+        {
+            // ROS_WARN("Near singular configuration");
+        }
 
-//         quaternionErr = q_i(t, q_start, q_end) * quaternionAtT.conjugate();
-//         Vector3d linearPosError = p_i(t, p_start, p_end) - positionAtT;
+        quaternionErr = myslerp(t, q_start, q_end) * quaternionAtT.conjugate();
+        Vector3d linearPosError = lerp(t, p_start, p_end) - positionAtT;
 
-//         correctedVelocities << linVelocitiesAtT + (Kp * linearPosError), angVelocitiesAtT + (Kq * quaternionErr.vec());
+        correctedVelocities << linVelocitiesAtT + (Kp * linearPosError), angVelocitiesAtT + (Kq * quaternionErr.vec());
 
-//         jointValues_dot = pseudoRightInverseJacAtT * correctedVelocities;
-//         jointValues = jointValues + (jointValues_dot * dt);
+        jointValues_dot = pseudoRightInverseJacAtT * correctedVelocities;
+        jointValues = jointValues + (jointValues_dot * dt);
 
-//         pathToFollow = insert_new_path_instance(pathToFollow, jointValues, gripper_state);
-//     }
-//     return pathToFollow;
-// }
+        pathToFollow = insert_new_path_instance(pathToFollow, jointValues, gripper_state);
+    }
+    return pathToFollow;
+}
 
-// Path insert_new_path_instance(Path p, Vector6d js, Vector2d gripper_state)
-//     {
-//         p.conservativeResize(p.rows() + 1, p.cols());
-//         p.row(p.rows() - 1) = V8d{js(0), js(1), js(2), js(3), js(4), js(5), gripper_state(0), gripper_state(1)};
-//         return p;
-//     }
+Path insert_new_path_instance(Path p, Vector6d js, Vector2d gripper_state)
+{
+    p.conservativeResize(p.rows() + 1, p.cols());
+    p.row(p.rows() - 1) << js(0), js(1), js(2), js(3), js(4), js(5);
+    p(p.rows() - 1, p.cols() - 2) = gripper_state(0);
+    p(p.rows() - 1, p.cols() - 1) = gripper_state(1);
+    return p;
+}

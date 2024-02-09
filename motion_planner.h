@@ -43,7 +43,7 @@ Matrix6d computeJacobian(Vector6d th);
 Matrix4d directKin(VectorXd Th);
 
 // function to compute the inverse kinematics:known the final pose we want to know the joint angles
-void inverseKin(MatrixXd &Th, double scaleFactor, Vector3d &pe60, Matrix3d &Re, Matrix4d &Tm);
+Matrix<double, 6, 8> inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor);
 
 // to interpolate two vectors and correctly compute the SLERP,
 // first of all we need to interpolate the 2 corresponding points in the space.
