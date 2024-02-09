@@ -6,7 +6,7 @@
 #include <eigen3/Eigen/Geometry> //to use quaternions
 #include <string.h>
 #include <cmath>
-// #include "ros/ros.h"
+#include "ros/ros.h"
 using namespace Eigen;
 using namespace std;
 
@@ -53,5 +53,7 @@ Vector3d lerp(double time, Vector3d p1, Vector3d p2);
 
 // as we did for position p1 and p2, we need to do the same with the respective quaternions, and find the "interpolated" quaternion
 Quaterniond myslerp(double time, Quaterniond q1, Quaterniond q2);
+Path insert_new_path_instance(Path p, Vector6d js, Vector2d gs);
+Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d i_p, Vector3d f_p, Quaterniond i_q, Quaterniond f_q);
 
 #endif

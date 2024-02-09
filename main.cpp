@@ -61,5 +61,24 @@ int main()
     Matrix3d my_R60 = directMatrix.block<3, 3>(0, 0);
     Th = inverseKin(my_pos60, my_R60, 10);
     print_eigen("joint variables from inverse kinematics\n", Th);
+
+
+    //testing inverse differential kinematics
+    Vector8d mr; // Stato del manipolatore
+    Vector3d i_p, f_p; // Punto iniziale e finale della traiettoria
+    Quaterniond i_q, f_q; // Orientazione iniziale e finale della traiettoria
+
+    // dati di input (esempio)
+    mr << 0, 0, 0, 0, 0, 0, 0, 0;
+    i_p << 0, 0, 0;
+    f_p << 1, 1, 1;
+    i_q.setIdentity();
+    f_q.setIdentity();
+
+    // Chiamata alla funzione da testare
+    Path result_path = differential_inverse_kin_quaternions(mr, i_p, f_p, i_q, f_q);
+    // Stampa del risultato
+    cout << "Path computed:" << endl;
+    cout << result_path << endl;
     return 0;
 }
