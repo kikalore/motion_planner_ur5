@@ -1,3 +1,10 @@
+/*!
+    @file   motion_planner.cpp
+    @brief  Functions implementation for ur5 motion planning
+    @date   26/11/2023
+    @author Federica Lorenzini
+*/
+
 #include "motion_planner.h"
 #include <iostream>
 #include <eigen3/Eigen/Core>
@@ -8,6 +15,12 @@
 #include <stdexcept>
 using namespace Eigen;
 using namespace std;
+
+/*!
+    @addtogroup Motion_module
+    @{
+*/
+
 
 Matrix4d computeTransformationMatrix(double th, double alpha, double distance, double a)
 {
@@ -92,7 +105,7 @@ Matrix6d computeJacobian(Vector6d th)
     return jacobianMatrix;
 }
 
-Eigen::Matrix4d directKin(Eigen::VectorXd Th)
+Eigen::Matrix4d directKin(VectorXd Th)
 {
     Matrix4d TransformationMatrix;
     // compute single transformations
