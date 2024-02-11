@@ -437,132 +437,98 @@ Quaterniond myslerp(double time, Quaterniond q1, Quaterniond q2)
 
 Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d i_p, Vector3d f_p, Quaterniond i_q, Quaterniond f_q)
 {
-    /*
-        gs is the gripper actual opening
-        js_k and ks_k_dot are joints values in the instant k and its derivative dot in the same insatnt
-    */
+    //gs is the gripper actual opening
+    //js_k and ks_k_dot are joints values in the instant k and its derivative dot in the same insatnt
     Vector2d gs {mr(6), mr(7)};
-    Vector6d js_k, js_dot_k; 
+    Vector6d js_k, js_dot_k;
 
-    /*
-        angular and positional velocities combined with the correction error
-    */
+    //angular and positional velocities combined with the correction error
     Vector6d fv;
 
-    /*
-        path of the robot
-    */
-    Path path;
+    //path of the robot
+	Path path;
 
-    /*
-        transformation matrix in the instant k 
-    */
+    //transformation matrix in the instant k 
     Matrix4d tm_k;
 
-    /*
-        position of the robot in the instant k
-    */
+    //position of the robot in the instant k
     Vector3d p_k;
 
-    /*
-        rotation matrix of the robot in the instant k
-    */
+    // rotation matrix of the robot in the instant k
     Matrix3d rm_k;
 
-    /*
-        quaternion related to the rotational matrix of the robot in the instant k
-    */
+    //quaternion related to the rotational matrix of the robot in the instant k
     Quaterniond q_k;
 
-    /*
-        angular and positional velocities of the robot in the instant k
-    */
+    // angular and positional velocities of the robot in the instant k
     Vector3d av_k, pv_k;
 
-    /*
-        quaternion velocity related to the angular velocity of the robot in the instant k
-    */
+    //quaternion velocity related to the angular velocity of the robot in the instant k
     Quaterniond qv_k;
 
-    /*
-        quaternion error of the rotational path (slerp) of the robot
-    */
+    // quaternion error of the rotational path (slerp) of the robot
     Quaterniond qerr_k;
 
-    /*
-        positional error of the linear path (x) of the robot
-    */
+    // positional error of the linear path (x) of the robot
     Vector3d perr_k;
 
-    /*
-        geometric jacobian and inverse geometric jacobian of the robot in the instant k
-    */
+    // geometric jacobian and inverse geometric jacobian of the robot in the instant k
     Matrix6d j_k, invj_k;
 
-    /*
-        Kp is for positional correction 
-        Kq is for quaternion correction 
-    */
+    //matrices for correction
     Matrix3d Kp, Kq;
-    Kp = Matrix3d::Identity() * 10;
+    Kp = Matrix3d::Identity() * 1; //10
     Kq = Matrix3d::Identity() * 1;
 
-    /*
-        insert the starting point to the path
-    */
+    //insert the starting point to the path
     for (int i = 0; i < 6; ++i) js_k(i) = mr(i);
     path = insert_new_path_instance(path, js_k, gs);
 
-    /*
-        each delta time (dt) compute the joints state to insert into the path 
-    */
+    //each delta time (dt) compute the joints state to insert into the path 
     for (double t = dt; t < path_dt; t += dt) 
     {
-        /*
-            compute the direct kinematics in the instant k 
-        */
-        tm_k = directKin(js_k);
+			std::cout << "##### t = " << t << " #####" << std::endl;
+        //compute the direct kinematics in the instant k 
+        tm_k = base_to_world() * directKin(js_k) * adjust_gripper();
         p_k = tm_k.block(0, 3, 3, 1);
         rm_k = tm_k.block(0, 0, 3, 3);
         q_k = rm_k;
+		
+		std::cout << "actual p: " << p_k.transpose() << " actual q: " << q_k.coeffs().transpose() << std::endl;
 
-        /*
-            compute the velocities in the instant k
-        */
+		//compute the velocities in the instant k
         pv_k = (lerp(t, i_p, f_p) - lerp(t - dt, i_p, f_p)) / dt;
-        qv_k = myslerp(t + dt, i_q, f_q) * myslerp(t, i_q, f_q).conjugate(); 
+        qv_k = myslerp(t, i_q, f_q) * myslerp(t - dt, i_q, f_q).conjugate();
 	    av_k = (qv_k.vec() * 2) / dt;
+		
+			std::cout << "pv_k: " << pv_k.transpose() << " qv_k: " << qv_k.coeffs().transpose() << " av_k: " << av_k.transpose() << std::endl;
 
-        /* 
-            compute the jacobian and its inverse in the instant k
-        */
+        //compute the jacobian and its inverse in the instant k
         j_k = computeJacobian(js_k);
-        invj_k = (j_k.transpose() * j_k + Matrix6d::Identity() * 0.0001).inverse() * j_k.transpose();
+        //invj_k = (j_k.transpose() * j_k + Matrix6d::Identity() * 0.0001).inverse() * j_k.transpose();
+		invj_k = j_k.transpose() * (j_k * j_k.transpose() + Matrix6d::Identity() * 0.0001).inverse();
         if (abs(j_k.determinant()) < 0.00001) 
         {
             ROS_WARN("Near singular configuration");
         }
             
-        /*
-            compute the errors in the path
-        */
+        //compute the errors in the path
         qerr_k = myslerp(t, i_q, f_q) * q_k.conjugate();
         perr_k = lerp(t, i_p, f_p) - p_k;
         
-        /*
-            compute the vector of the velocities composition with a parameter of correction
-        */
+        
+        //compute the vector of the velocities composition with a parameter of correction
+        
         fv << pv_k + (Kp * perr_k), av_k + (Kq * qerr_k.vec());
+		
+			std::cout << "perr_k: " << perr_k.transpose() << " qerr_k: " << qerr_k.coeffs().transpose() << std::endl;
+			std::cout << "fv: " << fv.transpose() << std::endl << std::endl;
 
-        /*
-            compute the joints state in the instant k
-        */
+        // compute the joints state in the instant k
         js_dot_k = invj_k * fv;
         js_k = js_k + (js_dot_k * dt);
 
-        /*
-            add it to the path
-        */
+        //add it to the path
         path = insert_new_path_instance(path, js_k, gs);
     }
 
