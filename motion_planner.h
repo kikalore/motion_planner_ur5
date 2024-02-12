@@ -35,7 +35,7 @@ const VectorXd d = (VectorXd(6) << 0.1625, 0, 0, 0.1333, 0.0997, 0.0996).finishe
 const VectorXd alpha = (VectorXd(6) << M_PI / 2, 0, 0, M_PI / 2, -M_PI / 2, 0).finished();
 
 const double dt = 0.1;       //!< Time delta used in a single path unit
-const double path_dt = 10.0; //!< Time duration of a single path unit
+const double path_dt = 20.0; //!< Time duration of a single path unit
 
 /*!
     @brief Function to check if a number is very close to zero.
@@ -65,10 +65,17 @@ Matrix4d computeTransformationMatrix(double th, double alpha, double distance, d
 
 /*!
     @brief Compute transformation matrix from base to world frame.
-    @details The transformation is given by traslation of (0.5, 0.35, 1.75) and a rotation of 180° about z axis.
-    @return The transformation matrix from base to world frame, it's a 4x4 matrix.
+    @details The transformation is given by a rotation of PI around x axis and a traslation of (0.5, 0.35, 1.75).
+    @return The transformation matrix, it's a 4x4 matrix.
 */
-Matrix4d rotation_180z_axis_and_offset();
+Matrix4d base_to_world();
+
+/*!
+    @brief Compute transformation matrix to align gripper to world frame.
+    @details The transformation is given by a rotation of PI/2 around z axis.
+    @return The transformation matrix, it's a 4x4 matrix.
+*/
+Matrix4d adjust_gripper();
 
 /*!
     @brief Function to compute Jacobian matrix
@@ -76,6 +83,13 @@ Matrix4d rotation_180z_axis_and_offset();
     @return the Jacobian matrix. It's a 6x6 matrix.
 */
 Matrix6d computeJacobian(Vector6d th);
+
+/*!
+    @brief Function to compute Jacobian matrix using cross product
+    @param[in] th: are the joint variables. Since we have six joints, th will be a 6 dimensions vector.
+    @return the Jacobian matrix. It's a 6x6 matrix.
+*/
+Matrix6d computeJacobianCross(Vector6d th);
 
 /*!
     @brief Function to compute direct kinematics matrix.
