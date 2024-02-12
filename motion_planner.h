@@ -103,6 +103,7 @@ Matrix4d directKin(VectorXd Th);
     @param[in] p60: are the joint variables. Since we have six joints, th will be a 6 dimensions vector.
     @param[in] R60: is the rotational matrix, extracted from direct kinematics matrix.
     @param[in] scaleFactor: scale factor.
+    @return the possible joint variables, in a matrix form, for a giving position and orientation given in the direct kinematics matrix.
 */
 Matrix<double, 6, 8> inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor);
 
@@ -112,6 +113,7 @@ Matrix<double, 6, 8> inverseKin(Vector3d p60, Matrix3d R60, double scaleFactor);
     @param[in] time: is the time between the two position.
     @param[in] p1: first point.
     @param[in] p2: second pint.
+    @return the interpolated 3D point.
 */
 Vector3d lerp(double time, Vector3d p1, Vector3d p2);
 
@@ -121,10 +123,31 @@ Vector3d lerp(double time, Vector3d p1, Vector3d p2);
     @param[in] time: is the time between the two quaternions.
     @param[in] q1: first quaternion.
     @param[in] q2: second quaternion.
+    @return the interpolated quaternion.
 */
 Quaterniond myslerp(double time, Quaterniond q1, Quaterniond q2);
 
+/*! 
+    @brief To insert a new path instance each time it's computed using inverse differential kinematics 
+    @details Path is a matrix with dynamic-rows-number, hence each time a path instance 
+                (a new set of joint variables) is compute in inverse differential, it's added to path.
+    @param[in] p: is the path the robot has to follow. It consists in a matrix with 8 columns 
+                    (6 for the joints + 2 for the gripper) and a dynamic number of rows.
+    @param[in] js: joint variables.
+    @param[in] gs: gripper state.
+    @return a matrix with 8 columns and a variable number of rows.
+*/
 Path insert_new_path_instance(Path p, Vector6d js, Vector2d gs);
+
+/*! 
+    @brief To compute the path the robot has to follow to reach the final point, which is expressed using position and quaternion for orientation.
+    @details The computation is performed by firstly adding the starting position to the path and then the following ones are added with an increment of dt=0.1s.
+            Joint velocities are computed using the Damped Least Square (DLS) Inverse, to avoid problems in inverting differential kinematics near a singularities.
+    @param[in] mr: are the theta angles of joints plus 2 variables to express gripper state.
+    @param[in] f_p: first quaternion.
+    @param[in] q2: second quaternion.
+    @return a matrix with 8 columns and a variable number of rows.
+*/
 Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d f_p, Quaterniond f_q);
 
 #endif
