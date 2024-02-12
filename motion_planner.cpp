@@ -435,7 +435,46 @@ Quaterniond myslerp(double time, Quaterniond q1, Quaterniond q2)
         return q2;
 }
 
-Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d i_p, Vector3d f_p, Quaterniond i_q, Quaterniond f_q)
+Matrix6d computeJacobianCross(Vector6d Th)
+{
+    Matrix4d T10 = base_to_world() * computeTransformationMatrix(Th(0), ALPHA(0), D(0), A(0));
+    Matrix4d T21 = computeTransformationMatrix(Th(1), ALPHA(1), D(1), A(1));
+    Matrix4d T32 = computeTransformationMatrix(Th(2), ALPHA(2), D(2), A(2));
+    Matrix4d T43 = computeTransformationMatrix(Th(3), ALPHA(3), D(3), A(3));
+    Matrix4d T54 = computeTransformationMatrix(Th(4), ALPHA(4), D(4), A(4));
+    Matrix4d T65 = computeTransformationMatrix(Th(5), ALPHA(5), D(5), A(5));
+    Matrix4d transMatrix20;
+    transMatrix20 = T10 * T21;
+    Matrix4d transMatrix30;
+    transMatrix30 = transMatrix20 * T32;
+    Matrix4d transMatrix40;
+    transMatrix40 = transMatrix30 * T43;
+    Matrix4d transMatrix50;
+    transMatrix50 = transMatrix40 * T54;
+    Matrix4d transMatrix60;
+    transMatrix60 = transMatrix50 * T65 * adjust_gripper();
+    Vector3d z0, z1, z2, z3, z4, z5;
+    z0 << 0, 0, -1;
+    z1 = T10.col(2).head(3);
+    z2 = transMatrix20.col(2).head(3);
+    z3 = transMatrix30.col(2).head(3);
+    z4 = transMatrix40.col(2).head(3);
+    z5 = transMatrix50.col(2).head(3);
+    Vector3d p0, p1, p2, p3, p4, p5, p6;
+    p0 << 0.5, 0.35, 1.75;
+    p1 = T10.col(3).head(3);
+    p2 = transMatrix20.col(3).head(3);
+    p3 = transMatrix30.col(3).head(3);
+    p4 = transMatrix40.col(3).head(3);
+    p5 = transMatrix50.col(3).head(3);
+    p6 = transMatrix60.col(3).head(3);
+    Matrix6d geomJacobian;
+    geomJacobian << z0.cross(p6 - p0), z1.cross(p6 - p1), z2.cross(p6 - p2), z3.cross(p6 - p3), z4.cross(p6 - p4), z5.cross(p6 - p5),
+        z0, z1, z2, z3, z4, z5;
+    return geomJacobian;
+}
+
+Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d f_p, Quaterniond f_q)
 {
     //gs is the gripper actual opening
     //js_k and ks_k_dot are joints values in the instant k and its derivative dot in the same insatnt
@@ -448,15 +487,27 @@ Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d i_p, Vector3d f_
     //path of the robot
 	Path path;
 
+	//initial transformation matrix
+    Matrix4d i_tm;
+	
     //transformation matrix in the instant k 
     Matrix4d tm_k;
-
+	
+	//initial position of the robot
+    Vector3d i_p;
+	
     //position of the robot in the instant k
     Vector3d p_k;
 
+	// initial rotation matrix of the robot
+    Matrix3d i_rm;
+	
     // rotation matrix of the robot in the instant k
     Matrix3d rm_k;
-
+	
+	//quaternion related to the rotational matrix of the robot in the instant k
+    Quaterniond i_q;
+	
     //quaternion related to the rotational matrix of the robot in the instant k
     Quaterniond q_k;
 
@@ -476,57 +527,74 @@ Path differential_inverse_kin_quaternions(Vector8d mr, Vector3d i_p, Vector3d f_
     Matrix6d j_k, invj_k;
 
     //matrices for correction
-    Matrix3d Kp, Kq;
-    Kp = Matrix3d::Identity() * 1; //10
-    Kq = Matrix3d::Identity() * 1;
-
+    Matrix3d Kp;
+	Matrix3d Kq;
+	Matrix6d Kjac;
+    Kp = Matrix3d::Identity() * 0.01; //10
+    Kq = Matrix3d::Identity() * 0.01; //1
+	Kjac = Matrix6d::Identity() * 0.0001;
+	
+	//extract initial position and orientation
+	i_tm = base_to_world() * directKin(mr.head(6)) * adjust_gripper();
+	i_p = i_tm.block(0, 3, 3, 1);
+	i_rm = i_tm.block(0, 0, 3, 3);
+	i_q	= i_rm;
+	
     //insert the starting point to the path
     for (int i = 0; i < 6; ++i) js_k(i) = mr(i);
     path = insert_new_path_instance(path, js_k, gs);
 
     //each delta time (dt) compute the joints state to insert into the path 
-    for (double t = dt; t < path_dt; t += dt) 
+    for (double t = 0; t < path_dt; t += dt) //for (double t = dt; t < path_dt; t += dt)
     {
-			std::cout << "##### t = " << t << " #####" << std::endl;
+//			std::cout << "##### t = " << t << " #####" << std::endl;
         //compute the direct kinematics in the instant k 
         tm_k = base_to_world() * directKin(js_k) * adjust_gripper();
         p_k = tm_k.block(0, 3, 3, 1);
         rm_k = tm_k.block(0, 0, 3, 3);
         q_k = rm_k;
 		
-		std::cout << "actual p: " << p_k.transpose() << " actual q: " << q_k.coeffs().transpose() << std::endl;
-
+//		std::cout << "actual p: " << p_k.transpose() << " actual q: " << q_k.coeffs().transpose() << std::endl;
+		
 		//compute the velocities in the instant k
-        pv_k = (lerp(t, i_p, f_p) - lerp(t - dt, i_p, f_p)) / dt;
-        qv_k = myslerp(t, i_q, f_q) * myslerp(t - dt, i_q, f_q).conjugate();
+        pv_k = (lerp(t + dt, i_p, f_p) - lerp(t, i_p, f_p)) / dt; //pv_k = (lerp(t, i_p, f_p) - lerp(t - dt, i_p, f_p)) / dt;
+        qv_k = myslerp(t + dt, i_q, f_q) * myslerp(t, i_q, f_q).conjugate(); //qv_k = myslerp(t, i_q, f_q) * myslerp(t - dt, i_q, f_q).conjugate();
 	    av_k = (qv_k.vec() * 2) / dt;
 		
-			std::cout << "pv_k: " << pv_k.transpose() << " qv_k: " << qv_k.coeffs().transpose() << " av_k: " << av_k.transpose() << std::endl;
-
+//			std::cout << "pv_k: " << pv_k.transpose() << " qv_k: " << qv_k.coeffs().transpose() << " av_k: " << av_k.transpose() << std::endl;
+		
         //compute the jacobian and its inverse in the instant k
-        j_k = computeJacobian(js_k);
+        j_k = computeJacobianCross(js_k);
         //invj_k = (j_k.transpose() * j_k + Matrix6d::Identity() * 0.0001).inverse() * j_k.transpose();
-		invj_k = j_k.transpose() * (j_k * j_k.transpose() + Matrix6d::Identity() * 0.0001).inverse();
-        if (abs(j_k.determinant()) < 0.00001) 
+		invj_k = j_k.transpose() * (j_k * j_k.transpose() + Kjac).inverse();
+        if (abs(j_k.determinant()) < 0.00001)
         {
             ROS_WARN("Near singular configuration");
         }
-            
+		
         //compute the errors in the path
-        qerr_k = myslerp(t, i_q, f_q) * q_k.conjugate();
-        perr_k = lerp(t, i_p, f_p) - p_k;
+		qerr_k = myslerp(t, i_q, f_q) * q_k.conjugate();
+			///qerr_k = Kq * qerr_k.coeffs();
+        perr_k = (lerp(t, i_p, f_p) - p_k) / dt; //perr_k = lerp(t, i_p, f_p) - p_k;
         
         
         //compute the vector of the velocities composition with a parameter of correction
-        
-        fv << pv_k + (Kp * perr_k), av_k + (Kq * qerr_k.vec());
+			///Quaterniond total_q;
+			///total_q = qv_k * qerr_k;
+			Vector3d aerr_k;
+			aerr_k = (qerr_k.vec() * 2) / dt;
+        fv << pv_k + (Kp * perr_k), av_k + (Kq * aerr_k); //fv << pv_k + (Kp * perr_k), av_k + (Kq * qerr_k.vec());
 		
-			std::cout << "perr_k: " << perr_k.transpose() << " qerr_k: " << qerr_k.coeffs().transpose() << std::endl;
-			std::cout << "fv: " << fv.transpose() << std::endl << std::endl;
+//			std::cout << "perr_k: " << perr_k.transpose() << " qerr_k: " << qerr_k.coeffs().transpose() << std::endl;
+//			std::cout << "fv: " << fv.transpose() << std::endl;
 
         // compute the joints state in the instant k
         js_dot_k = invj_k * fv;
         js_k = js_k + (js_dot_k * dt);
+		
+//			std::cout << "js_dot_k: " << js_dot_k.transpose() << std::endl << std::endl;
+			
+//			std::cout << "target: " << lerp(t + dt, i_p, f_p).transpose() << std::endl << std::endl;
 
         //add it to the path
         path = insert_new_path_instance(path, js_k, gs);
